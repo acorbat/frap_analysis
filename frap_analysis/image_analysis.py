@@ -293,8 +293,8 @@ def citoplasm_to_curves(df_pos_path, columns=['date', 'condition', 'experiment',
         this_pre_df = this_df.query('kind == "pre"')
         this_pos_df = this_df.query('kind == "pos"')
 
-        mean_pre_intensity = np.mean(this_pre_df.mean_intensity.values[0])
-        std_pre_intensity = np.std(this_pre_df.mean_intensity.values[0])
+        mean_pre_intensity = np.mean(this_pre_df.median_intensity.values[0])
+        std_pre_intensity = np.std(this_pre_df.median_intensity.values[0])
 
         try:
             new_df.at[this_pre_df.index[0], 'mean_pre_intensity'] = mean_pre_intensity
@@ -302,9 +302,9 @@ def citoplasm_to_curves(df_pos_path, columns=['date', 'condition', 'experiment',
             new_df.at[this_pre_df.index[0], 'std_pre_intensity'] = std_pre_intensity
             new_df.at[this_pos_df.index[0], 'std_pre_intensity'] = std_pre_intensity
             new_df.at[this_pre_df.index[0], 'intensity'] = np.asarray(
-                new_df.at[this_pre_df.index[0], 'mean_intensity'] / mean_pre_intensity)
+                new_df.at[this_pre_df.index[0], 'median_intensity'] / mean_pre_intensity)
             new_df.at[this_pos_df.index[0], 'intensity'] = np.asarray(
-                new_df.at[this_pos_df.index[0], 'mean_intensity'] / mean_pre_intensity)
+                new_df.at[this_pos_df.index[0], 'median_intensity'] / mean_pre_intensity)
         except IndexError:
             print('date: %s, condition: %s, exp: %s, cell: %s is missing a period.' % column_values)
 
