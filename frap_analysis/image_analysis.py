@@ -13,11 +13,14 @@ from foci_finder import foci_analysis as fa
 
 def load_and_segment(path):
     """
-    Loads the last version of an image and segments it returning the labeled stack
+    Loads the last version of an image and segments it returning the labeled stack.
+
+    It first loads the last version of the image according to numbering procedure in fv1000. Runs find foci for each
+    frame and returns the labeled stack.
 
     Parameters
     ----------
-    path: str, pathlib
+    path: pathlib.Path
         Path to the image file to load
 
     Returns
@@ -40,16 +43,22 @@ def load_and_segment(path):
 
 def load_and_track(path_labeled):
     """
-    Loads image and its bleaching counterpart, correct it for background and bleaching, segment it and returns a
-    corrected stack, the foci labeled stack and a list with the labels of particles contained in the bleaching area.
+    With path to labeled image, it looks for path to the original image and loads its last version. Calculates bleaching
+    correction and corrects for bleaching and background. Generates a list of bleached particles inside the bleached
+    region. Tracks every particle in the stack and returns a DataFrame with tracked particles information as well as
+    particle labeled stack. Time is corrected to set 0 as the moment when bleaching ends.
 
     Parameters
     ----------
-    path
+    path_labeled: pathlib.Path
+        Path to the labeled image file to load
 
     Returns
     -------
-
+    tracked: Pandas DataFrame
+        DataFrame containing the information of each tracked particle in the set of images.
+    particle_labeled: np.array
+        stack labeled according to particle numbers
     """
     path = get_original_path(path_labeled)
     img = fv.FV1000(str(path))
@@ -89,6 +98,29 @@ def load_and_track(path_labeled):
 
 
 def track(stack, foci_labeled, particles, scales, bbox):
+    """Tracks the particles found in the foci_labeled stack, assigning them the mean intensity from stack. It generates
+    a boolean column where True means that the particle was bleached. Returns time column as frames multiplied by scale.
+
+    Parameters
+    ----------
+    stack: np.array
+        image stack from which mean intensities are estimated
+    foci_labeled: np.array
+        foci labeled stack from which particles are tracked
+    particles: list
+        list of particle labels that have been bleached
+    scales: dictionary
+        dictionary containing the scale for each dimension
+    bbox: list
+        borders of the bleached region
+
+    Returns
+    -------
+    tracked: pandas DataFrame
+        DatFrame containing the information of the tracked particles
+    particle_labeled: np.array
+        labeled stack by each tracked particle
+    """
     tracked = tk.track(foci_labeled.astype(int), max_dist=1, gap=0, scale=scales,
                        extra_attrs=['area', 'mean_intensity'], intensity_image=stack)
     tracked = tracked.reset_index(drop=True)
@@ -105,7 +137,29 @@ def track(stack, foci_labeled, particles, scales, bbox):
 def tracks_to_curves(df_pos_path, columns=['date', 'condition', 'experiment', 'cell'],
                      squash_columns=['time', 'X', 'Y', 'Z', 'mean_intensity', 'area', 'frame'],
                      df_pre_path=None):
+    """Loads a post bleaching DataFrame, with its corresponding pre bleached DataFrame, groups them by columns and then
+    squashes all the column information in squash columns make them a list in each cell where each row is one of the
+    grouped by DataFrames. This allows having whole curve of timepoints in each cell.
 
+    Parameters
+    ----------
+    df_pos_path: pathlib.Path
+        path to the corresponding post bleached DataFrame. If df_pre_path is given, this variable can be a string.
+    columns: (optional) list
+        List of columns to be used to group by the DataFrames.
+    squash_columns: (optional) list
+        List of columns containing the timepoints that are to be saved in each cell as a list.
+    df_pre_path: (optional) pathlib.Path, string
+        path to the corresponding pre bleached DataFrame. Default is None and path is used to guess the pre bleached
+        path
+
+    Returns
+    -------
+    new_df: Pandas DataFrame
+        DataFrame containing the information of intensity timepoints normalized to mean pre bleached intensities and
+        ready to be fitted and analyzed by frap functions.
+
+    """
     if df_pre_path is None:
         parts = df_pos_path.stem.split('_')
         parts[-1] = 'pre'
@@ -162,7 +216,7 @@ def tracks_to_curves(df_pos_path, columns=['date', 'condition', 'experiment', 'c
 
 
 def expand_bbox(bbox, pixs=10, max_bbox=256):
-    """Expands bounding box by pixs limiting iot to a maximum size of max_bbox."""
+    """Expands bounding box by pixs limiting it to a maximum size of max_bbox."""
     bbox = np.asarray([_bbox - pixs if n % 2 == 0 else _bbox + pixs for n, _bbox in enumerate(bbox)])
     bbox = np.clip(bbox, 0, max_bbox)
     return bbox
@@ -189,6 +243,7 @@ def find_bleached_particle(stack, bbox):
 
 
 def get_original_path(path):
+    """Uses given path to labeled image to look for the originating image."""
     label_dir = path.parents[4]
     label_dir = label_dir.joinpath('data')
     parts = path.parts[-4:]
@@ -198,6 +253,7 @@ def get_original_path(path):
 
 
 def find_bleching_end_time(img, img_ble):
+    """Calculates when was the end of bleaching period."""
     abs_start_pos = img.get_acquisition_time()
     abs_start_ble = img_ble.get_acquisition_time()
     t_step_ble = img_ble.get_t_step()
@@ -211,6 +267,21 @@ def find_bleching_end_time(img, img_ble):
 # Citoplasm analysis
 
 def get_intensity_df(stack, bbox):
+    """Returns a DataFrame containing information about the intensity in the bbox region.
+
+    Parameters
+    ----------
+    stack: np.array
+        stack of images from which intensity must be estimated
+    bbox: list
+        borders of the bleached region
+
+    Returns
+    -------
+    pandas DataFrame
+        DataFrame containing information of the bleached area.
+
+    """
     sel_stack = stack[:, bbox[0]:bbox[1], bbox[2]:bbox[3]]
     area = (bbox[1] - bbox[0]) * (bbox[3] - bbox[2])
     variable_dict = {'sum_intensity': np.nansum(sel_stack, axis=(1, 2)),
@@ -224,6 +295,20 @@ def get_intensity_df(stack, bbox):
 
 
 def load_and_correct_citoplasmic(path):
+    """Loads last version of the image at path and corrects for bleaching and background. Returns a DataFrame containing
+    information about the bleached area.
+
+    Parameters
+    ----------
+    path: pathlib.Path
+        path to the image to be analyzed
+
+    Returns
+    -------
+    df: pandas DataFrame
+        DataFrame containing information of the set of bleached areas in the analyzed stack
+
+    """
     img = fv.FV1000(str(path))
     path = img.get_last_path()
     img = fv.FV1000(str(path))
@@ -258,6 +343,30 @@ def citoplasm_to_curves(df_pos_path, columns=['date', 'condition', 'experiment',
                      squash_columns=['time', 'sum_intensity', 'mean_intensity',
                                      'std_intensity', 'median_intensity', 'frame', 'area'],
                      df_pre_path=None):
+    """Loads a DataFrame containing the information of a various bleached areas and prepares a DataFrame that can be
+    analyzed by frap analysis function. DataFrames are grouped by columns and then squashes all the column information
+    in squash columns make them a list in each cell where each row is one of the grouped by DataFrames. This allows
+    having whole curve of timepoints in each cell.
+
+    Parameters
+    ----------
+    df_pos_path: pathlib.Path
+        path to the corresponding post bleached DataFrame. If df_pre_path is given, this variable can be a string.
+    columns: (optional) list
+        List of columns to be used to group by the DataFrames.
+    squash_columns: (optional) list
+        List of columns containing the timepoints that are to be saved in each cell as a list.
+    df_pre_path: (optional) pathlib.Path, string
+        path to the corresponding pre bleached DataFrame. Default is None and path is used to guess the pre bleached
+        path
+
+    Returns
+    -------
+    new_df: Pandas DataFrame
+        DataFrame containing the information of intensity timepoints normalized to mean pre bleached intensities and
+        ready to be fitted and analyzed by frap functions.
+
+    """
 
     if df_pre_path is None:
         parts = df_pos_path.stem.split('_')
