@@ -5,6 +5,7 @@ import lmfit as lm
 
 
 def load_df(path):
+    """loads a Pandas DataFrame from path"""
     return pd.read_pickle(str(path))
 
 
@@ -30,7 +31,21 @@ def exponential(t, amplitude, characteristic_time, constant):
 
 
 def fit_simple_exponential(x, y):
+    """Takes two vector like elements and fits them with a single exponential function.
 
+    Parameters
+    ----------
+    x: list, np.array
+        Values taken by the independent variable
+    y: list, np.array
+        Values taken by the dependent variable
+
+    Returns
+    -------
+    : lmfit.ModelResult class
+        Returns a class containing the best fit parameters and other statistical estimators of goodness of fit.
+
+    """
     # Model Instantiation
     recovery_model = lm.Model(exponential, independent_vars=['t'])
     recovery_params = recovery_model.make_params(amplitude=0.7,
@@ -44,6 +59,7 @@ def fit_simple_exponential(x, y):
 
 
 def fit_df_simple_exponential(df, columns=['date', 'condition', 'experiment', 'cell']):
+    """Applies simple exponential fit to every row of DataFrame df of kind "pos" and grouping them by columns."""
     df['amplitude'] = np.nan
     df['characteristic_time'] = np.nan
     df['immobile_fraction'] = np.nan
@@ -98,7 +114,21 @@ def double_exponential(t, amplitude_1, characteristic_time_1, amplitude_2, chara
 
 
 def fit_double_exponential(x, y):
+    """Takes two vector like elements and fits them with a double exponential function.
 
+        Parameters
+        ----------
+        x: list, np.array
+            Values taken by the independent variable
+        y: list, np.array
+            Values taken by the dependent variable
+
+        Returns
+        -------
+        : lmfit.ModelResult class
+            Returns a class containing the best fit parameters and other statistical estimators of goodness of fit.
+
+        """
     # Model Instantiation
     recovery_model = lm.Model(double_exponential, independent_vars=['t'])
     recovery_params = recovery_model.make_params(amplitude_1=0.35,
@@ -125,6 +155,7 @@ def fit_double_exponential(x, y):
 
 
 def fit_df_double_exponential(df, columns=['date', 'condition', 'experiment', 'cell']):
+    """Applies simple exponential fit to every row of DataFrame df of kind "pos" and grouping them by columns."""
     df['amplitude_1'] = np.nan
     df['characteristic_time_1'] = np.nan
     df['amplitude_2'] = np.nan
